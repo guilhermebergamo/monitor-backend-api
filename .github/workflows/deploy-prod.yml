@@ -9,8 +9,9 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  AZURE_WEBAPP_NAME: 'monitor-api-prod' # Nome do seu Azure App Service/Container App para produção
-  RESOURCE_GROUP: 'seu-resource-group-prod' # Seu resource group de produção
+  AZURE_CONTAINER_APP_NAME: 'monitor-api-prod' # Nome do seu Azure Container App de produção
+  RESOURCE_GROUP: 'rg-monitor-prod' # Resource group de produção
+  CONTAINER_REGISTRY: 'seu-registry.azurecr.io' # Seu Azure Container Registry
 
 jobs:
   build-and-deploy:
@@ -37,19 +38,27 @@ jobs:
       run: dotnet test MonitorBackend.sln --no-build --verbosity normal --configuration Release
       # Em produção, falhar se os testes falharem
       
-    - name: Publish
-      run: dotnet publish src/01-API/MonitorBackend.Api/MonitorBackend.Api.csproj --configuration Release --output ./publish --no-build
-      
     - name: Login to Azure
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS_PROD }}
         
-    - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v2
-      with:
-        app-name: ${{ env.AZURE_WEBAPP_NAME }}
-        package: ./publish
+    - name: Login to Azure Container Registry
+      run: |
+        az acr login --name ${{ secrets.ACR_NAME }}
+        
+    - name: Build and Push Docker Image
+      run: |
+        docker build -f Dockerfile.api -t ${{ env.CONTAINER_REGISTRY }}/monitor-api:${{ github.sha }} -t ${{ env.CONTAINER_REGISTRY }}/monitor-api:latest .
+        docker push ${{ env.CONTAINER_REGISTRY }}/monitor-api:${{ github.sha }}
+        docker push ${{ env.CONTAINER_REGISTRY }}/monitor-api:latest
+        
+    - name: Deploy to Azure Container App
+      run: |
+        az containerapp update \
+          --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --image ${{ env.CONTAINER_REGISTRY }}/monitor-api:${{ github.sha }}
         
     - name: Logout from Azure
       run: az logout

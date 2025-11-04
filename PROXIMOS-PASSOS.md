@@ -29,36 +29,52 @@ git checkout develop
 
 ### 3. Configurar Azure - Development
 
-Você já tem o Resource Group de dev. Agora precisa:
+Você já tem o Resource Group `rg-monitor-dev`. Agora precisa:
 
 ```bash
 # 1. Login no Azure
 az login
 
-# 2. Listar seus resource groups para confirmar o nome
-az group list --output table
+# 2. Criar Container Registry (se ainda não tiver)
+ACR_NAME="monitorregistry"  # ⚠️ AJUSTE se necessário (único globalmente)
+RESOURCE_GROUP="rg-monitor-dev"
 
-# 3. Criar o App Service para dev (ajuste os nomes)
-RESOURCE_GROUP="seu-resource-group-dev"  # ⚠️ AJUSTAR
-APP_NAME="monitor-api-dev"                # ⚠️ AJUSTAR
-
-az appservice plan create \
-  --name "${APP_NAME}-plan" \
+az acr create \
+  --name $ACR_NAME \
   --resource-group $RESOURCE_GROUP \
-  --sku B1 \
-  --is-linux
+  --sku Basic \
+  --admin-enabled true
 
-az webapp create \
-  --name $APP_NAME \
+# Anotar credenciais do ACR
+az acr credential show --name $ACR_NAME
+
+# 3. Criar Container Apps Environment (se não tiver)
+az containerapp env create \
+  --name monitor-env-dev \
   --resource-group $RESOURCE_GROUP \
-  --plan "${APP_NAME}-plan" \
-  --runtime "DOTNET:8.0"
+  --location eastus
 
-# 4. Criar Service Principal para GitHub Actions
+# 4. Criar Container App
+az containerapp create \
+  --name monitor-api-dev \
+  --resource-group $RESOURCE_GROUP \
+  --environment monitor-env-dev \
+  --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
+  --target-port 8080 \
+  --ingress external \
+  --registry-server "${ACR_NAME}.azurecr.io" \
+  --cpu 0.5 \
+  --memory 1.0Gi \
+  --min-replicas 0 \
+  --max-replicas 3
+
+# 5. Criar Service Principal para GitHub Actions
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
 az ad sp create-for-rbac \
   --name "github-actions-monitor-dev" \
   --role contributor \
-  --scopes /subscriptions/{SUBSCRIPTION_ID}/resourceGroups/$RESOURCE_GROUP \
+  --scopes /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP \
   --sdk-auth
 
 # ⚠️ COPIE TODO O JSON RETORNADO!
@@ -67,10 +83,15 @@ az ad sp create-for-rbac \
 ### 4. Configurar Secrets no GitHub
 
 1. Acesse: `https://github.com/SEU_USUARIO/SEU_REPOSITORIO/settings/secrets/actions`
-2. Clique em **New repository secret**
-3. Nome: `AZURE_CREDENTIALS_DEV`
-4. Valor: Cole o JSON do Service Principal
-5. Salve
+2. Adicione os seguintes secrets:
+
+**AZURE_CREDENTIALS_DEV**:
+- Valor: Cole o JSON do Service Principal
+
+**ACR_NAME**:
+- Valor: Nome do seu Container Registry (ex: `monitorregistry`)
+
+3. Salve todos os secrets
 
 ### 5. Atualizar o Workflow de Dev
 
@@ -78,8 +99,9 @@ Edite `.github/workflows/deploy-dev.yml`:
 
 ```yaml
 env:
-  AZURE_WEBAPP_NAME: 'monitor-api-dev'  # ⚠️ Seu App Name real
-  RESOURCE_GROUP: 'seu-resource-group-dev'  # ⚠️ Seu Resource Group real
+  AZURE_CONTAINER_APP_NAME: 'monitor-api-dev'  # ⚠️ Seu Container App Name
+  RESOURCE_GROUP: 'rg-monitor-dev'  # ✅ Já configurado
+  CONTAINER_REGISTRY: 'monitorregistry.azurecr.io'  # ⚠️ Seu ACR
 ```
 
 ### 6. Fazer Push e Testar
@@ -92,14 +114,15 @@ git push origin develop
 
 Acompanhe o deploy em: `https://github.com/SEU_USUARIO/SEU_REPOSITORIO/actions`
 
-### 7. Configurar Variáveis de Ambiente no Azure
+### 7. Configurar Variáveis de Ambiente no Container App
 
 ```bash
-az webapp config appsettings set \
-  --name $APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --settings \
+az containerapp update \
+  --name monitor-api-dev \
+  --resource-group rg-monitor-dev \
+  --set-env-vars \
     ASPNETCORE_ENVIRONMENT="Development" \
+    ASPNETCORE_URLS="http://+:8080" \
     ConnectionStrings__DefaultConnection="Host=ep-dark-dream-a820yymb-pooler.eastus2.azure.neon.tech;Database=MonitordbDevelop;Username=neondb_owner;Password=npg_Er10paDuIsmd;SSL Mode=Require;Trust Server Certificate=true" \
     FrontendUrl="http://localhost:5173"
 ```
