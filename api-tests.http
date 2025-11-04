@@ -1,0 +1,64 @@
+### Monitor Backend API - REST Client Tests
+### Para usar: instale a extensão REST Client no VS Code
+
+@baseUrl = http://localhost:8080
+@azureUrl = https://monitor-api.azurecontainerapps.io
+
+### Health Check - Local
+GET {{baseUrl}}/
+Accept: application/json
+
+###
+
+### Health Check - Azure
+GET {{azureUrl}}/
+Accept: application/json
+
+###
+
+### Get All Registros - Local
+GET {{baseUrl}}/api/registros
+Accept: application/json
+
+###
+
+### Get All Registros - Azure
+GET {{azureUrl}}/api/registros
+Accept: application/json
+
+###
+
+### Health Check do Controller - Local
+GET {{baseUrl}}/api/registros/health
+Accept: application/json
+
+###
+
+### Swagger JSON - Local
+GET {{baseUrl}}/swagger/v1/swagger.json
+Accept: application/json
+
+###
+
+### Test with Query Parameters (exemplo para futuras implementações)
+# GET {{baseUrl}}/api/registros?dataInicio=2024-01-01&dataFim=2024-12-31
+# Accept: application/json
+
+###
+
+### POST Example (quando implementar Commands)
+# POST {{baseUrl}}/api/registros
+# Content-Type: application/json
+# 
+# {
+#   "observacao": "Novo registro via API",
+#   "quantidade": 100
+# }
+
+###
+
+### Test Error Handling
+GET {{baseUrl}}/api/registros/999999
+Accept: application/json
+
+###

@@ -1,0 +1,28 @@
+# Dockerfile específico para a API (mais otimizado para deploy separado)
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copia todo o código fonte de uma vez
+COPY src/ ./
+
+# Restaura dependências
+RUN dotnet restore "01-API/MonitorBackend.Api/MonitorBackend.Api.csproj"
+
+# Build e Publish
+RUN dotnet publish "01-API/MonitorBackend.Api/MonitorBackend.Api.csproj" -c Release -o /app/publish
+
+# Runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
+
+# Copia binários
+COPY --from=build /app/publish .
+
+# Expõe porta
+EXPOSE 8080
+
+# Variáveis de ambiente
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+ENTRYPOINT ["dotnet", "MonitorBackend.Api.dll"]

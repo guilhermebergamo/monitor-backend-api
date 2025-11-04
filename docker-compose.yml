@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Banco de dados PostgreSQL local para testes
+  postgres:
+    image: postgres:16-alpine
+    container_name: monitor-postgres
+    environment:
+      POSTGRES_DB: monitordb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database-setup.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - monitor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: monitor-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=monitordb;Username=postgres;Password=postgres;Port=5432
+      - FrontendUrl=http://localhost:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - monitor-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  monitor-network:
+    driver: bridge

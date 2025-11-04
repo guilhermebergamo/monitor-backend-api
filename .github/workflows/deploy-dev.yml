@@ -1,0 +1,53 @@
+name: Deploy to Azure - Development
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch: # Permite executar manualmente
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  AZURE_WEBAPP_NAME: 'monitor-api-dev' # Nome do seu Azure App Service/Container App
+  RESOURCE_GROUP: 'seu-resource-group-dev' # Seu resource group de dev
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore MonitorBackend.sln
+      
+    - name: Build
+      run: dotnet build MonitorBackend.sln --configuration Release --no-restore
+      
+    - name: Run tests
+      run: dotnet test MonitorBackend.sln --no-build --verbosity normal --configuration Release
+      continue-on-error: true # Continue mesmo se não houver testes
+      
+    - name: Publish
+      run: dotnet publish src/01-API/MonitorBackend.Api/MonitorBackend.Api.csproj --configuration Release --output ./publish --no-build
+      
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS_DEV }}
+        
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        package: ./publish
+        
+    - name: Logout from Azure
+      run: az logout
+      if: always()

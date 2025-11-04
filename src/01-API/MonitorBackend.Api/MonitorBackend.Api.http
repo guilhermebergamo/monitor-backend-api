@@ -1,0 +1,6 @@
+@MonitorBackend.Api_HostAddress = http://localhost:5063
+
+GET {{MonitorBackend.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

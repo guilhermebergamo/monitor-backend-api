@@ -1,0 +1,13 @@
+# Ignora arquivos desnecessários no build do Docker
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/*.user
+**/.gitignore
+**/README.md
+**/.git/
+**/.dockerignore
+**/docker-compose*
+**/Dockerfile*
+**/*.md

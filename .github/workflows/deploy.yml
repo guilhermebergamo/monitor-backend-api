@@ -1,0 +1,102 @@
+name: Build and Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_CONTAINER_REGISTRY: monitorbackendacr
+  AZURE_RESOURCE_GROUP: monitor-backend-rg
+  API_CONTAINER_APP_NAME: monitor-api
+  WORKER_CONTAINER_APP_NAME: monitor-worker
+  API_IMAGE_NAME: monitor-api
+  WORKER_IMAGE_NAME: monitor-worker
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore MonitorBackend.sln
+      
+    - name: Build solution
+      run: dotnet build MonitorBackend.sln --configuration Release --no-restore
+      
+    # Descomente para adicionar testes
+    # - name: Run tests
+    #   run: dotnet test MonitorBackend.sln --no-restore --verbosity normal
+
+  build-and-push-images:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+        
+    - name: Build and push API image
+      run: |
+        docker build -f Dockerfile.api -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }} .
+        docker build -f Dockerfile.api -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.API_IMAGE_NAME }}:latest .
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.API_IMAGE_NAME }}:latest
+        
+    - name: Build and push Worker image
+      run: |
+        docker build -f Dockerfile.worker -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.WORKER_IMAGE_NAME }}:${{ github.sha }} .
+        docker build -f Dockerfile.worker -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.WORKER_IMAGE_NAME }}:latest .
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.WORKER_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.WORKER_IMAGE_NAME }}:latest
+
+  deploy-to-azure:
+    needs: build-and-push-images
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Deploy API to Azure Container Apps
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+        containerAppName: ${{ env.API_CONTAINER_APP_NAME }}
+        imageToDeploy: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+        
+    - name: Deploy Worker to Azure Container Apps
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+        containerAppName: ${{ env.WORKER_CONTAINER_APP_NAME }}
+        imageToDeploy: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.WORKER_IMAGE_NAME }}:${{ github.sha }}
+        
+    - name: Azure Logout
+      run: az logout
