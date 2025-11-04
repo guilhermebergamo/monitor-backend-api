@@ -17,7 +17,17 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "Monitor Backend API", Version = "v1" });
+    c.SwaggerDoc("v1", new()
+    {
+        Title = "Monitor Backend API",
+        Version = "v1",
+        Description = "API backend com Clean Architecture, CQRS e PostgreSQL (Neon)",
+        Contact = new()
+        {
+            Name = "Monitor Backend",
+            Url = new Uri("https://github.com/guilhermebergamo/monitor-backend-api")
+        }
+    });
 });
 
 // Configuração do banco de dados PostgreSQL (Neon)
@@ -82,26 +92,34 @@ var app = builder.Build();
 
 // === Configuração do Pipeline HTTP ===
 
-// Swagger em todos os ambientes
+// Swagger em todos os ambientes (disponível tanto em dev quanto prod)
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Monitor Backend API v1");
-    c.RoutePrefix = string.Empty; // Swagger na raiz
+    c.RoutePrefix = "swagger"; // Swagger em /swagger
+    c.DocumentTitle = "Monitor Backend API - Documentação";
 });
 
 app.UseCors("AllowFrontend");
 app.UseAuthorization();
 app.MapControllers();
 
-// Health check na raiz
-app.MapGet("/", () => new
+// Redirecionar a raiz para o Swagger
+app.MapGet("/", () => Results.Redirect("/swagger"))
+    .ExcludeFromDescription();
+
+// Health check em /health
+app.MapGet("/health", () => new
 {
     service = "Monitor Backend API",
-    status = "running",
+    status = "healthy",
     timestamp = DateTime.UtcNow,
     environment = app.Environment.EnvironmentName,
-    architecture = "Clean Architecture + CQRS (sem MediatR)"
-}).WithName("HealthCheck");
+    architecture = "Clean Architecture + CQRS",
+    database = "PostgreSQL (Neon)",
+    swagger = "/swagger"
+}).WithName("HealthCheck")
+  .WithTags("Health");
 
 app.Run();
