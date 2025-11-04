@@ -27,16 +27,15 @@ Primeiro, precisamos de um Container Registry para armazenar as imagens Docker:
 az login
 
 # Definir variáveis
-ACR_NAME="monitorregistry"  # ⚠️ Ajuste para seu registry (deve ser único globalmente)
+ACR_NAME="monitordevregistry"  # ✅ Container Registry existente
 RESOURCE_GROUP="rg-monitor-dev"
 LOCATION="eastus"
 
-# Criar Azure Container Registry (se ainda não tiver)
-az acr create \
-  --name $ACR_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --sku Basic \
-  --admin-enabled true
+# Verificar o Azure Container Registry (já existe)
+az acr show --name $ACR_NAME --resource-group $RESOURCE_GROUP
+
+# Garantir que admin está habilitado
+az acr update --name $ACR_NAME --admin-enabled true
 
 # Obter credenciais do ACR (anote para usar nos secrets do GitHub)
 az acr credential show --name $ACR_NAME
@@ -49,15 +48,14 @@ az acr credential show --name $ACR_NAME
 # Definir variáveis
 RESOURCE_GROUP="rg-monitor-dev"
 LOCATION="eastus"
-ENVIRONMENT_NAME="monitor-env-dev"
 CONTAINER_APP_NAME="monitor-api-dev"
-ACR_NAME="monitorregistry"  # Seu ACR
+ACR_NAME="monitordevregistry"  # ✅ ACR existente
 
-# Criar Container Apps Environment (se ainda não tiver)
-az containerapp env create \
-  --name $ENVIRONMENT_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --location $LOCATION
+# Listar Container Apps Environments existentes (você já tem um com o worker)
+az containerapp env list --resource-group $RESOURCE_GROUP --output table
+
+# Anote o nome do environment e defina a variável
+ENVIRONMENT_NAME="SEU_ENVIRONMENT_NAME"  # ⚠️ Ajuste com o nome real do seu environment
 
 # Criar Container App
 az containerapp create \
@@ -67,7 +65,7 @@ az containerapp create \
   --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
   --target-port 8080 \
   --ingress external \
-  --registry-server "${ACR_NAME}.azurecr.io" \
+  --registry-server "monitordevregistry.azurecr.io" \
   --cpu 0.5 \
   --memory 1.0Gi \
   --min-replicas 0 \
@@ -80,9 +78,11 @@ az containerapp update \
   --set-env-vars \
     ASPNETCORE_ENVIRONMENT="Development" \
     ASPNETCORE_URLS="http://+:8080" \
-    ConnectionStrings__DefaultConnection="Host=SEU_HOST;Database=SEU_DB;Username=SEU_USER;Password=SUA_SENHA;SSL Mode=Require;Trust Server Certificate=true" \
-    FrontendUrl="https://seu-frontend-dev.azurestaticapps.net"
+    ConnectionStrings__DefaultConnection="Host=ep-dark-dream-a820yymb-pooler.eastus2.azure.neon.tech;Database=MonitordbDevelop;Username=neondb_owner;Password=npg_Er10paDuIsmd;SSL Mode=Require;Trust Server Certificate=true" \
+    FrontendUrl="https://white-river-0f9f4b40f.3.azurestaticapps.net"
 ```
+
+> ⚠️ **Nota**: Você já tem um Container Apps Environment com o worker rodando. Use o mesmo environment para a API.
 
 #### Para Production:
 ```bash
@@ -91,7 +91,7 @@ RESOURCE_GROUP="rg-monitor-prod"
 LOCATION="eastus"
 ENVIRONMENT_NAME="monitor-env-prod"
 CONTAINER_APP_NAME="monitor-api-prod"
-ACR_NAME="monitorregistry"  # Mesmo ACR
+ACR_NAME="monitordevregistry"  # ✅ Mesmo ACR do dev
 
 # Criar Resource Group de produção (se ainda não existir)
 az group create \
@@ -112,7 +112,7 @@ az containerapp create \
   --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
   --target-port 8080 \
   --ingress external \
-  --registry-server "${ACR_NAME}.azurecr.io" \
+  --registry-server "monitordevregistry.azurecr.io" \
   --cpu 1.0 \
   --memory 2.0Gi \
   --min-replicas 1 \
@@ -126,8 +126,10 @@ az containerapp update \
     ASPNETCORE_ENVIRONMENT="Production" \
     ASPNETCORE_URLS="http://+:8080" \
     ConnectionStrings__DefaultConnection="Host=SEU_HOST_PROD;Database=SEU_DB_PROD;Username=SEU_USER;Password=SUA_SENHA;SSL Mode=Require;Trust Server Certificate=true" \
-    FrontendUrl="https://seu-frontend-prod.azurestaticapps.net"
+    FrontendUrl="https://SEU_FRONTEND_PROD.azurestaticapps.net"
 ```
+
+> ⚠️ **Nota**: Configurar produção quando necessário. Por enquanto, foque no ambiente de desenvolvimento.
 
 ### 3. Criar Service Principal para GitHub Actions
 
@@ -200,13 +202,13 @@ Clique em **New repository secret** e adicione:
 
 #### Secrets para Container Registry:
 - **Nome**: `ACR_NAME`
-- **Valor**: Nome do seu Container Registry (ex: `monitorregistry`)
+- **Valor**: `monitordevregistry` ✅
 
 - **Nome**: `ACR_USERNAME` (opcional, se usar autenticação do admin)
-- **Valor**: Username do ACR (obtido com `az acr credential show`)
+- **Valor**: Username do ACR (obtido com `az acr credential show --name monitordevregistry`)
 
 - **Nome**: `ACR_PASSWORD` (opcional, se usar autenticação do admin)
-- **Valor**: Password do ACR (obtido com `az acr credential show`)
+- **Valor**: Password do ACR (obtido com `az acr credential show --name monitordevregistry`)
 
 ## 📝 Atualizar os Workflows
 
@@ -215,18 +217,22 @@ Edite os arquivos de workflow e atualize as variáveis:
 ### `.github/workflows/deploy-dev.yml`
 ```yaml
 env:
-  AZURE_CONTAINER_APP_NAME: 'monitor-api-dev' # ⚠️ Seu Container App Name
-  RESOURCE_GROUP: 'rg-monitor-dev' # ⚠️ Já configurado
-  CONTAINER_REGISTRY: 'monitorregistry.azurecr.io' # ⚠️ Seu ACR
+  AZURE_CONTAINER_APP_NAME: 'monitor-api-dev' # ✅ Container App
+  RESOURCE_GROUP: 'rg-monitor-dev' # ✅ Resource Group
+  CONTAINER_REGISTRY: 'monitordevregistry.azurecr.io' # ✅ ACR
 ```
+
+**Nada precisa ser alterado - já está configurado!** ✅
 
 ### `.github/workflows/deploy-prod.yml`
 ```yaml
 env:
-  AZURE_CONTAINER_APP_NAME: 'monitor-api-prod' # ⚠️ Seu Container App Name
-  RESOURCE_GROUP: 'rg-monitor-prod' # ⚠️ Já configurado
-  CONTAINER_REGISTRY: 'monitorregistry.azurecr.io' # ⚠️ Seu ACR
+  AZURE_CONTAINER_APP_NAME: 'monitor-api-prod' # ⚠️ Criar quando necessário
+  RESOURCE_GROUP: 'rg-monitor-prod' # ⚠️ Criar quando necessário
+  CONTAINER_REGISTRY: 'monitordevregistry.azurecr.io' # ✅ Mesmo ACR
 ```
+
+> ⚠️ **Nota**: Produção ainda não foi criada. Configure quando necessário.
 
 ## 🚀 Testando o Deploy
 

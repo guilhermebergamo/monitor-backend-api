@@ -1,5 +1,12 @@
 name: Deploy to Azure - Production
 
+# ⚠️ ATENÇÃO: Ambiente de produção ainda não foi criado
+# Este workflow está preparado mas não funcionará até criar:
+# - Resource Group: rg-monitor-prod
+# - Container Apps Environment
+# - Container App: monitor-api-prod
+# - Service Principal para produção
+
 on:
   push:
     branches:
@@ -9,9 +16,9 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  AZURE_CONTAINER_APP_NAME: 'monitor-api-prod' # Nome do seu Azure Container App de produção
-  RESOURCE_GROUP: 'rg-monitor-prod' # Resource group de produção
-  CONTAINER_REGISTRY: 'seu-registry.azurecr.io' # Seu Azure Container Registry
+  AZURE_CONTAINER_APP_NAME: 'monitor-api-prod' # Nome do seu Azure Container App de produção (CRIAR QUANDO NECESSÁRIO)
+  RESOURCE_GROUP: 'rg-monitor-prod' # Resource group de produção (CRIAR QUANDO NECESSÁRIO)
+  CONTAINER_REGISTRY: 'monitordevregistry.azurecr.io' # Azure Container Registry (mesmo registry)
 
 jobs:
   build-and-deploy:

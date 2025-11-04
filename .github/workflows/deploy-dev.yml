@@ -10,7 +10,7 @@ env:
   DOTNET_VERSION: '8.0.x'
   AZURE_CONTAINER_APP_NAME: 'monitor-api-dev' # Nome do seu Azure Container App
   RESOURCE_GROUP: 'rg-monitor-dev' # Resource group de desenvolvimento
-  CONTAINER_REGISTRY: 'seu-registry.azurecr.io' # Seu Azure Container Registry
+  CONTAINER_REGISTRY: 'monitordevregistry.azurecr.io' # Azure Container Registry
 
 jobs:
   build-and-deploy:

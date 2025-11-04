@@ -29,40 +29,38 @@ git checkout develop
 
 ### 3. Configurar Azure - Development
 
-Você já tem o Resource Group `rg-monitor-dev`. Agora precisa:
+Você já tem o Resource Group `rg-monitor-dev` e o Container Registry `monitordevregistry`. Agora precisa:
 
 ```bash
 # 1. Login no Azure
 az login
 
-# 2. Criar Container Registry (se ainda não tiver)
-ACR_NAME="monitorregistry"  # ⚠️ AJUSTE se necessário (único globalmente)
+# 2. Verificar o Container Registry (já existe)
+ACR_NAME="monitordevregistry"
 RESOURCE_GROUP="rg-monitor-dev"
 
-az acr create \
-  --name $ACR_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --sku Basic \
-  --admin-enabled true
+# Verificar se o admin está habilitado
+az acr update --name $ACR_NAME --admin-enabled true
 
-# Anotar credenciais do ACR
+# Anotar credenciais do ACR (para configurar secrets)
 az acr credential show --name $ACR_NAME
 
-# 3. Criar Container Apps Environment (se não tiver)
-az containerapp env create \
-  --name monitor-env-dev \
-  --resource-group $RESOURCE_GROUP \
-  --location eastus
+# 3. Verificar Container Apps Environment (você já tem um, pois tem worker rodando)
+# Liste os environments existentes
+az containerapp env list --resource-group $RESOURCE_GROUP --output table
 
-# 4. Criar Container App
+# Anote o nome do environment (algo como monitor-env-dev ou similar)
+ENVIRONMENT_NAME="SEU_ENVIRONMENT_NAME"  # ⚠️ Ajuste com o nome real
+
+# 4. Criar Container App para a API
 az containerapp create \
   --name monitor-api-dev \
   --resource-group $RESOURCE_GROUP \
-  --environment monitor-env-dev \
+  --environment $ENVIRONMENT_NAME \
   --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
   --target-port 8080 \
   --ingress external \
-  --registry-server "${ACR_NAME}.azurecr.io" \
+  --registry-server "monitordevregistry.azurecr.io" \
   --cpu 0.5 \
   --memory 1.0Gi \
   --min-replicas 0 \
@@ -89,20 +87,22 @@ az ad sp create-for-rbac \
 - Valor: Cole o JSON do Service Principal
 
 **ACR_NAME**:
-- Valor: Nome do seu Container Registry (ex: `monitorregistry`)
+- Valor: `monitordevregistry`
 
 3. Salve todos os secrets
 
-### 5. Atualizar o Workflow de Dev
+### 5. Verificar o Workflow de Dev
 
-Edite `.github/workflows/deploy-dev.yml`:
+O workflow `.github/workflows/deploy-dev.yml` já está configurado com:
 
 ```yaml
 env:
-  AZURE_CONTAINER_APP_NAME: 'monitor-api-dev'  # ⚠️ Seu Container App Name
-  RESOURCE_GROUP: 'rg-monitor-dev'  # ✅ Já configurado
-  CONTAINER_REGISTRY: 'monitorregistry.azurecr.io'  # ⚠️ Seu ACR
+  AZURE_CONTAINER_APP_NAME: 'monitor-api-dev'  # ✅ Nome do Container App
+  RESOURCE_GROUP: 'rg-monitor-dev'  # ✅ Resource Group
+  CONTAINER_REGISTRY: 'monitordevregistry.azurecr.io'  # ✅ ACR
 ```
+
+**Nada precisa ser alterado aqui!** ✅
 
 ### 6. Fazer Push e Testar
 
@@ -124,7 +124,7 @@ az containerapp update \
     ASPNETCORE_ENVIRONMENT="Development" \
     ASPNETCORE_URLS="http://+:8080" \
     ConnectionStrings__DefaultConnection="Host=ep-dark-dream-a820yymb-pooler.eastus2.azure.neon.tech;Database=MonitordbDevelop;Username=neondb_owner;Password=npg_Er10paDuIsmd;SSL Mode=Require;Trust Server Certificate=true" \
-    FrontendUrl="http://localhost:5173"
+    FrontendUrl="https://white-river-0f9f4b40f.3.azurestaticapps.net"
 ```
 
 ## 📚 Documentação Completa
