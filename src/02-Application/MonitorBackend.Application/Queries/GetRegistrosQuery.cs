@@ -26,6 +26,7 @@ public sealed record GetRegistrosQueryResult
 {
     public IEnumerable<Registro> Registros { get; init; } = Array.Empty<Registro>();
     public int TotalRegistros { get; init; }
+    public long SomaQuantidade { get; init; } // Soma total da coluna quantidade
     public int PageNumber { get; init; }
     public int PageSize { get; init; }
     public int TotalPages { get; init; }
@@ -35,6 +36,7 @@ public sealed record GetRegistrosQueryResult
     public static GetRegistrosQueryResult CreateSuccess(
         IEnumerable<Registro> registros,
         int totalRegistros,
+        long somaQuantidade,
         int pageNumber,
         int pageSize)
     {
@@ -45,6 +47,7 @@ public sealed record GetRegistrosQueryResult
         {
             Registros = lista,
             TotalRegistros = totalRegistros,
+            SomaQuantidade = somaQuantidade,
             PageNumber = pageNumber,
             PageSize = pageSize,
             TotalPages = totalPages,
@@ -59,6 +62,7 @@ public sealed record GetRegistrosQueryResult
         {
             Registros = Array.Empty<Registro>(),
             TotalRegistros = 0,
+            SomaQuantidade = 0,
             PageNumber = 1,
             PageSize = 10,
             TotalPages = 0,

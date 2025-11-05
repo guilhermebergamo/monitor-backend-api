@@ -28,13 +28,13 @@ public sealed class GetRegistrosQueryHandler : IQueryHandler<GetRegistrosQuery, 
             var pageSize = query.PageSize < 1 ? 10 : query.PageSize > 100 ? 100 : query.PageSize;
 
             // Busca os registros paginados no repositório
-            var (registros, totalCount) = await _repository.GetPaginatedAsync(
+            var (registros, totalCount, somaQuantidade) = await _repository.GetPaginatedAsync(
                 pageNumber,
                 pageSize,
                 cancellationToken);
 
             // Retorna o resultado usando factory method
-            return GetRegistrosQueryResult.CreateSuccess(registros, totalCount, pageNumber, pageSize);
+            return GetRegistrosQueryResult.CreateSuccess(registros, totalCount, somaQuantidade, pageNumber, pageSize);
         }
         catch (Exception ex)
         {
