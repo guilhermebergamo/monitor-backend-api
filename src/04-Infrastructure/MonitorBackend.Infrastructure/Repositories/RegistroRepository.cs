@@ -75,7 +75,7 @@ public sealed class RegistroRepository : IRegistroRepository
         const string sql = @"
             SELECT 
                 observacao AS Observacao,
-                data_hora AS DataHora,
+                datahora AS DataHora,
                 quantidade AS Quantidade
             FROM registros
             WHERE id = @Id";
@@ -110,7 +110,7 @@ public sealed class RegistroRepository : IRegistroRepository
     {
         const string sql = @"
             SELECT 
-                quantidade
+                id
             FROM registros
             ORDER BY id DESC
             LIMIT 1";
