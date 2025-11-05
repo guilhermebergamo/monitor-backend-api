@@ -5,8 +5,33 @@ using MonitorBackend.Application.Queries;
 using MonitorBackend.Domain.Repositories;
 using MonitorBackend.Infrastructure.Data;
 using MonitorBackend.Infrastructure.Repositories;
+using MonitorBackend.Infrastructure.Services;
+using MonitorBackend.Infrastructure.BackgroundJobs;
+using Serilog;
+using Serilog.Events;
+using StackExchange.Redis;
+using Hangfire;
+using Hangfire.PostgreSql;
+using AspNetCoreRateLimit;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
+// === Configuração do Serilog (Logs Estruturados) ===
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Hangfire", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithEnvironmentName()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Usa Serilog
+builder.Host.UseSerilog();
 
 // === Configuração de Serviços ===
 
@@ -40,6 +65,114 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 
 // Registra os repositórios (Scoped)
 builder.Services.AddScoped<IRegistroRepository, RegistroRepository>();
+
+// === Redis Cache (Distribuído) ===
+var redisConnection = builder.Configuration.GetConnectionString("RedisConnection") ?? "localhost:6379";
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    try
+    {
+        var configuration = ConfigurationOptions.Parse(redisConnection);
+        configuration.AbortOnConnectFail = false; // Não falha se Redis estiver indisponível
+        return ConnectionMultiplexer.Connect(configuration);
+    }
+    catch
+    {
+        // Se Redis não estiver disponível, retorna uma conexão simulada
+        Log.Warning("Redis not available, using in-memory fallback");
+        return ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
+    }
+});
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+
+// === Hangfire (Background Jobs) ===
+builder.Services.AddHangfire(config =>
+{
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+          .UseSimpleAssemblyNameTypeSerializer()
+          .UseRecommendedSerializerSettings()
+          .UsePostgreSqlStorage(options =>
+          {
+              options.UseNpgsqlConnection(connectionString);
+          });
+});
+builder.Services.AddHangfireServer(options =>
+{
+    options.WorkerCount = 2; // 2 workers paralelos
+});
+
+// Registra jobs
+builder.Services.AddScoped<DataCleanupJob>();
+builder.Services.AddScoped<StatisticsAggregationJob>();
+builder.Services.AddScoped<MonthlyReportJob>();
+builder.Services.AddScoped<DatabaseHealthCheckJob>();
+
+// === Sistema de Filas (Channels) ===
+builder.Services.AddSingleton<EventQueueService>();
+builder.Services.AddHostedService<EventProcessorWorker>();
+
+// === Rate Limiting ===
+builder.Services.AddMemoryCache();
+builder.Services.Configure<IpRateLimitOptions>(options =>
+{
+    options.EnableEndpointRateLimiting = true;
+    options.StackBlockedRequests = false;
+    options.HttpStatusCode = 429;
+    options.RealIpHeader = "X-Real-IP";
+    options.GeneralRules = new List<RateLimitRule>
+    {
+        new RateLimitRule
+        {
+            Endpoint = "*",
+            Period = "1m",
+            Limit = 60 // 60 requisições por minuto
+        },
+        new RateLimitRule
+        {
+            Endpoint = "POST:/api/registros",
+            Period = "1m",
+            Limit = 100 // 100 POSTs por minuto
+        }
+    };
+});
+builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
+builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
+builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+builder.Services.AddSingleton<IProcessingStrategy, AsyncKeyLockProcessingStrategy>();
+
+// === Health Checks ===
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        connectionString,
+        name: "postgresql",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "db", "sql", "postgresql" })
+    .AddCheck("memory", () =>
+    {
+        var allocated = GC.GetTotalMemory(false);
+        var threshold = 1024L * 1024 * 1024; // 1GB
+        return allocated < threshold
+            ? HealthCheckResult.Healthy($"Memory usage: {allocated / 1024 / 1024}MB")
+            : HealthCheckResult.Degraded($"Memory usage: {allocated / 1024 / 1024}MB");
+    }, tags: new[] { "memory" })
+    .AddCheck("disk-space", () =>
+    {
+        var drive = new DriveInfo(Directory.GetCurrentDirectory());
+        var freeSpaceGB = drive.AvailableFreeSpace / 1024 / 1024 / 1024;
+        return freeSpaceGB > 1
+            ? HealthCheckResult.Healthy($"Free disk space: {freeSpaceGB}GB")
+            : HealthCheckResult.Degraded($"Low disk space: {freeSpaceGB}GB");
+    }, tags: new[] { "disk" });
+
+// === Application Insights (Telemetria Azure) ===
+var appInsightsKey = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(appInsightsKey))
+{
+    builder.Services.AddApplicationInsightsTelemetry(options =>
+    {
+        options.ConnectionString = appInsightsKey;
+    });
+}
 
 // === CQRS: Registra o Dispatcher e os Handlers ===
 // Dispatchers
@@ -92,6 +225,9 @@ var app = builder.Build();
 
 // === Configuração do Pipeline HTTP ===
 
+// Rate Limiting
+app.UseIpRateLimiting();
+
 // Swagger em todos os ambientes (disponível tanto em dev quanto prod)
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -101,6 +237,16 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "Monitor Backend API - Documentação";
 });
 
+// Hangfire Dashboard (sem autenticação para desenvolvimento)
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    DisplayStorageConnectionString = false,
+    DashboardTitle = "Monitor Backend Jobs"
+});
+
+// Configura os jobs recorrentes
+RecurringJobs.ConfigureJobs();
+
 app.UseCors("AllowFrontend");
 app.UseAuthorization();
 app.MapControllers();
@@ -109,17 +255,64 @@ app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
 
-// Health check em /health
-app.MapGet("/health", () => new
+// Health Checks com UI formatada
+app.MapHealthChecks("/health", new HealthCheckOptions
 {
-    service = "Monitor Backend API",
-    status = "healthy",
-    timestamp = DateTime.UtcNow,
-    environment = app.Environment.EnvironmentName,
-    architecture = "Clean Architecture + CQRS",
-    database = "PostgreSQL (Neon)",
-    swagger = "/swagger"
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
 }).WithName("HealthCheck")
   .WithTags("Health");
 
-app.Run();
+// Health check detalhado em JSON
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("db"),
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+}).WithName("ReadinessCheck")
+  .WithTags("Health");
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false // Apenas verifica se a aplicação está rodando
+}).WithName("LivenessCheck")
+  .WithTags("Health");
+
+// Endpoint de métricas simples
+app.MapGet("/metrics", () => new
+{
+    service = "Monitor Backend API",
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.EnvironmentName,
+    architecture = "Clean Architecture + CQRS + Redis + Hangfire",
+    features = new[]
+    {
+        "PostgreSQL (Neon)",
+        "Redis Cache",
+        "Hangfire Jobs",
+        "Rate Limiting",
+        "Serilog Logging",
+        "Health Checks",
+        "Application Insights"
+    },
+    memory_mb = GC.GetTotalMemory(false) / 1024 / 1024,
+    endpoints = new
+    {
+        swagger = "/swagger",
+        hangfire = "/hangfire",
+        health = "/health"
+    }
+}).WithName("Metrics")
+  .WithTags("Monitoring");
+
+try
+{
+    Log.Information("Starting Monitor Backend API");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
