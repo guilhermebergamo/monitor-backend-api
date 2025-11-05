@@ -39,9 +39,9 @@ public class RegistrarAcessoCommandHandler : ICommandHandler<RegistrarAcessoComm
             var registroId = await _repository.InsertAsync(command.Observacao, dataHora, novaQuantidade);
 
             // Busca os registros paginados (primeira página, 10 registros)
-            var (registros, totalCount, somaQuantidade) = await _repository.GetPaginatedAsync(1, 10, cancellationToken);
+            var (registros, totalCount) = await _repository.GetPaginatedAsync(1, 10, cancellationToken);
 
-            return RegistrarAcessoCommandResult.CreateSuccess(registros, totalCount, somaQuantidade, 1, 10);
+            return RegistrarAcessoCommandResult.CreateSuccess(registros, totalCount, 1, 10);
         }
         catch (Exception ex)
         {

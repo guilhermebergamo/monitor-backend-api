@@ -36,7 +36,7 @@ public sealed class RegistroRepository : IRegistroRepository
         return registros;
     }
 
-    public async Task<(IEnumerable<Registro> Registros, int TotalCount, long SomaQuantidade)> GetPaginatedAsync(
+    public async Task<(IEnumerable<Registro> Registros, int TotalCount)> GetPaginatedAsync(
         int pageNumber,
         int pageSize,
         CancellationToken cancellationToken = default)
@@ -45,7 +45,6 @@ public sealed class RegistroRepository : IRegistroRepository
         var offset = (pageNumber - 1) * pageSize;
 
         const string sqlCount = "SELECT COUNT(*) FROM registros";
-        const string sqlSum = "SELECT COALESCE(SUM(quantidade), 0) FROM registros";
 
         const string sqlData = @"
             SELECT 
@@ -61,9 +60,6 @@ public sealed class RegistroRepository : IRegistroRepository
         // Busca o total de registros
         var totalCount = await connection.ExecuteScalarAsync<int>(sqlCount);
 
-        // Busca a soma total da quantidade
-        var somaQuantidade = await connection.ExecuteScalarAsync<long>(sqlSum);
-
         // Busca os registros paginados
         var registros = await connection.QueryAsync<Registro>(sqlData, new
         {
@@ -71,7 +67,7 @@ public sealed class RegistroRepository : IRegistroRepository
             Offset = offset
         });
 
-        return (registros, totalCount, somaQuantidade);
+        return (registros, totalCount);
     }
 
     public async Task<Registro?> GetByIdAsync(int id)

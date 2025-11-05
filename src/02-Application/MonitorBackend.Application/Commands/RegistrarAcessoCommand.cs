@@ -15,7 +15,6 @@ public record RegistrarAcessoCommandResult
 {
     public IEnumerable<Registro> Registros { get; init; } = [];
     public int TotalRegistros { get; init; }
-    public long SomaQuantidade { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 10;
     public int TotalPages { get; init; }
@@ -25,7 +24,6 @@ public record RegistrarAcessoCommandResult
     public static RegistrarAcessoCommandResult CreateSuccess(
         IEnumerable<Registro> registros,
         int totalRegistros,
-        long somaQuantidade,
         int pageNumber = 1,
         int pageSize = 10)
     {
@@ -36,7 +34,6 @@ public record RegistrarAcessoCommandResult
         {
             Registros = lista,
             TotalRegistros = totalRegistros,
-            SomaQuantidade = somaQuantidade,
             PageNumber = pageNumber,
             PageSize = pageSize,
             TotalPages = totalPages,
