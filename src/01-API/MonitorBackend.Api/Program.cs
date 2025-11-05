@@ -85,6 +85,10 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 });
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 
+// === Telemetria de Recursos (Memória, CPU, GC) ===
+builder.Services.AddSingleton<IResourceTelemetryService, ResourceTelemetryService>();
+builder.Services.AddHostedService<ResourceMonitorWorker>(); // Log automático a cada minuto
+
 // === Hangfire (Background Jobs) ===
 builder.Services.AddHangfire(config =>
 {
@@ -225,6 +229,9 @@ var app = builder.Build();
 
 // === Configuração do Pipeline HTTP ===
 
+// Telemetria de recursos em cada requisição
+app.UseMiddleware<MonitorBackend.Api.Middleware.ResourceTelemetryMiddleware>();
+
 // Rate Limiting
 app.UseIpRateLimiting();
 
@@ -276,30 +283,61 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 }).WithName("LivenessCheck")
   .WithTags("Health");
 
-// Endpoint de métricas simples
-app.MapGet("/metrics", () => new
+// Endpoint de métricas com telemetria de recursos
+app.MapGet("/metrics", (MonitorBackend.Infrastructure.Services.IResourceTelemetryService telemetry) =>
 {
-    service = "Monitor Backend API",
-    timestamp = DateTime.UtcNow,
-    environment = app.Environment.EnvironmentName,
-    architecture = "Clean Architecture + CQRS + Redis + Hangfire",
-    features = new[]
+    var metrics = telemetry.GetCurrentMetrics();
+
+    return new
     {
-        "PostgreSQL (Neon)",
-        "Redis Cache",
-        "Hangfire Jobs",
-        "Rate Limiting",
-        "Serilog Logging",
-        "Health Checks",
-        "Application Insights"
-    },
-    memory_mb = GC.GetTotalMemory(false) / 1024 / 1024,
-    endpoints = new
-    {
-        swagger = "/swagger",
-        hangfire = "/hangfire",
-        health = "/health"
-    }
+        service = "Monitor Backend API",
+        timestamp = metrics.Timestamp,
+        environment = app.Environment.EnvironmentName,
+        architecture = "Clean Architecture + CQRS + Redis + Hangfire",
+        features = new[]
+        {
+            "PostgreSQL (Neon)",
+            "Redis Cache",
+            "Hangfire Jobs",
+            "Rate Limiting",
+            "Serilog Logging",
+            "Health Checks",
+            "Application Insights",
+            "Resource Telemetry"
+        },
+        resources = new
+        {
+            memory = new
+            {
+                gc_memory_mb = Math.Round(metrics.GcMemoryMB, 2),
+                working_set_mb = Math.Round(metrics.WorkingSetMB, 2),
+                private_memory_mb = Math.Round(metrics.PrivateMemoryMB, 2),
+                total_mb = Math.Round(metrics.TotalMemoryMB, 2)
+            },
+            cpu = new
+            {
+                total_processor_time_seconds = Math.Round(metrics.TotalProcessorTimeSeconds, 2),
+                user_processor_time_seconds = Math.Round(metrics.UserProcessorTimeSeconds, 2)
+            },
+            threads = new
+            {
+                count = metrics.ThreadCount
+            },
+            garbage_collector = new
+            {
+                gen0_collections = metrics.Gen0Collections,
+                gen1_collections = metrics.Gen1Collections,
+                gen2_collections = metrics.Gen2Collections
+            }
+        },
+        endpoints = new
+        {
+            swagger = "/swagger",
+            hangfire = "/hangfire",
+            health = "/health",
+            metrics = "/metrics"
+        }
+    };
 }).WithName("Metrics")
   .WithTags("Monitoring");
 

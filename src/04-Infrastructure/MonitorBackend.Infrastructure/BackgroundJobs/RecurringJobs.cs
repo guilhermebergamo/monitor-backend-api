@@ -43,19 +43,27 @@ public static class RecurringJobs
 public class DataCleanupJob
 {
     private readonly IRegistroRepository _repository;
+    private readonly Services.IResourceTelemetryService _telemetry;
 
-    public DataCleanupJob(IRegistroRepository repository)
+    public DataCleanupJob(
+        IRegistroRepository repository,
+        Services.IResourceTelemetryService telemetry)
     {
         _repository = repository;
+        _telemetry = telemetry;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        _telemetry.LogResourceUsage("DataCleanupJob - Start");
+
         // Simula processamento pesado
         await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
 
         // Lógica de limpeza seria implementada aqui
         // Por enquanto apenas simula o processamento
+
+        _telemetry.LogResourceUsage("DataCleanupJob - End");
     }
 }
 
@@ -65,14 +73,20 @@ public class DataCleanupJob
 public class StatisticsAggregationJob
 {
     private readonly IRegistroRepository _repository;
+    private readonly Services.IResourceTelemetryService _telemetry;
 
-    public StatisticsAggregationJob(IRegistroRepository repository)
+    public StatisticsAggregationJob(
+        IRegistroRepository repository,
+        Services.IResourceTelemetryService telemetry)
     {
         _repository = repository;
+        _telemetry = telemetry;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        _telemetry.LogResourceUsage("StatisticsAggregationJob - Start");
+
         // Simula agregação de estatísticas
         var registros = await _repository.GetAllAsync();
 
@@ -88,6 +102,8 @@ public class StatisticsAggregationJob
             .ToList();
 
         await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+
+        _telemetry.LogResourceUsage("StatisticsAggregationJob - End");
     }
 }
 
@@ -97,16 +113,24 @@ public class StatisticsAggregationJob
 public class MonthlyReportJob
 {
     private readonly IRegistroRepository _repository;
+    private readonly Services.IResourceTelemetryService _telemetry;
 
-    public MonthlyReportJob(IRegistroRepository repository)
+    public MonthlyReportJob(
+        IRegistroRepository repository,
+        Services.IResourceTelemetryService telemetry)
     {
         _repository = repository;
+        _telemetry = telemetry;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        _telemetry.LogResourceUsage("MonthlyReportJob - Start");
+
         // Simula geração de relatório pesado
         await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+
+        _telemetry.LogResourceUsage("MonthlyReportJob - End");
     }
 }
 
@@ -116,14 +140,20 @@ public class MonthlyReportJob
 public class DatabaseHealthCheckJob
 {
     private readonly IRegistroRepository _repository;
+    private readonly Services.IResourceTelemetryService _telemetry;
 
-    public DatabaseHealthCheckJob(IRegistroRepository repository)
+    public DatabaseHealthCheckJob(
+        IRegistroRepository repository,
+        Services.IResourceTelemetryService telemetry)
     {
         _repository = repository;
+        _telemetry = telemetry;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        _telemetry.LogResourceUsage("DatabaseHealthCheckJob - Start");
+
         try
         {
             // Verifica se consegue buscar dados
@@ -134,5 +164,7 @@ public class DatabaseHealthCheckJob
             // Log de erro seria registrado aqui
             Console.WriteLine($"Database health check failed: {ex.Message}");
         }
+
+        _telemetry.LogResourceUsage("DatabaseHealthCheckJob - End");
     }
 }
