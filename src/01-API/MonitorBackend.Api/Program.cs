@@ -89,6 +89,9 @@ builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 builder.Services.AddSingleton<IResourceTelemetryService, ResourceTelemetryService>();
 builder.Services.AddHostedService<ResourceMonitorWorker>(); // Log automático a cada minuto
 
+// === Serviços de Processamento Pesado ===
+builder.Services.AddScoped<IHeavyProcessingService, HeavyProcessingService>();
+
 // === Hangfire (Background Jobs) ===
 builder.Services.AddHangfire(config =>
 {
@@ -102,14 +105,23 @@ builder.Services.AddHangfire(config =>
 });
 builder.Services.AddHangfireServer(options =>
 {
-    options.WorkerCount = 2; // 2 workers paralelos
+    options.WorkerCount = 4; // 4 workers paralelos para processar mais jobs simultaneamente
+    options.Queues = new[] { "critical", "default", "low" }; // Múltiplas filas
+    options.ServerName = $"MonitorBackend-{Environment.MachineName}";
 });
 
-// Registra jobs
+// Registra jobs originais
 builder.Services.AddScoped<DataCleanupJob>();
 builder.Services.AddScoped<StatisticsAggregationJob>();
 builder.Services.AddScoped<MonthlyReportJob>();
 builder.Services.AddScoped<DatabaseHealthCheckJob>();
+
+// Registra jobs PESADOS
+builder.Services.AddScoped<HeavyDataProcessingJob>();
+builder.Services.AddScoped<IntensiveCpuJob>();
+builder.Services.AddScoped<ParallelProcessingJob>();
+builder.Services.AddScoped<LargeReportGenerationJob>();
+builder.Services.AddScoped<CacheWarmupJob>();
 
 // === Sistema de Filas (Channels) ===
 builder.Services.AddSingleton<EventQueueService>();
@@ -253,6 +265,9 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 
 // Configura os jobs recorrentes
 RecurringJobs.ConfigureJobs();
+
+// Configura os jobs PESADOS (consumo massivo de recursos)
+HeavyRecurringJobs.ConfigureHeavyJobs();
 
 app.UseCors("AllowFrontend");
 app.UseAuthorization();

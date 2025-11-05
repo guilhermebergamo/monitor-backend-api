@@ -41,6 +41,24 @@ monitor-backend/
 
 - **Swagger/OpenAPI** - Documentação da API
 - **Docker** - Containerização para Azure
+- **Redis Cache** - Cache distribuído (Azure Cache for Redis)
+- **Hangfire** - Background jobs com PostgreSQL storage
+- **Serilog** - Logs estruturados
+- **Application Insights** - Telemetria Azure
+- **Rate Limiting** - Proteção contra sobrecarga
+- **Health Checks** - Monitoramento de saúde
+- **Resource Telemetry** - Métricas de memória/CPU/threads
+
+## 🔥 Sistema de Processamento Pesado
+
+Projeto inclui **sistema extremamente pesado** para simular aplicação de produção de grande porte:
+- ⚡ **Background jobs a cada 2-15 minutos** (processamento massivo)
+- 💾 **Consumo de 800MB-1.5GB de RAM** (vs 300-500MB sem carga)
+- 🖥️ **60-90% CPU contínuo** (vs 10-15% idle)
+- 🔄 **Processamento paralelo multi-core**
+- 📊 **Endpoints para stress test e benchmarks**
+
+**📖 Documentação completa**: [HEAVY-SYSTEM.md](HEAVY-SYSTEM.md)
 
 ## 🎯 Funcionalidades
 
