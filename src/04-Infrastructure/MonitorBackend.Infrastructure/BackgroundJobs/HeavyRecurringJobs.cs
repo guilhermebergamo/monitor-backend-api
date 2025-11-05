@@ -1,4 +1,5 @@
 using Hangfire;
+using Microsoft.Extensions.Logging;
 using MonitorBackend.Infrastructure.Services;
 
 namespace MonitorBackend.Infrastructure.BackgroundJobs;
